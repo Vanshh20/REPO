@@ -14,7 +14,7 @@ XML_FILE_PATH = '/Users/vanshjain/Downloads/BRSR_1241134_10092024014211_WEB.xml'
 CONVERSION_URL = "http://ec2-3-221-41-38.compute-1.amazonaws.com"
 EXPECTED_DOWNLOAD_FILENAME = "brsr_1241134_10092024014211_web.xlsx"
 
-# Create download directory if it doesn't exist
+
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 chrome_options = Options()
@@ -24,7 +24,7 @@ chrome_options.accept_insecure_certs = True
 chrome_options.add_argument("--allow-running-insecure-content")
 chrome_options.add_argument("--unsafely-treat-insecure-origin-as-secure=http://ec2-3-221-41-38.compute-1.amazonaws.com")
 
-# These options are to disable security warnings and allow file download without interruption
+
 prefs = {
     "download.default_directory": DOWNLOAD_DIR,  # Set the default download location
     "download.prompt_for_download": False,       # Disable download prompt
@@ -42,7 +42,7 @@ chrome_options.add_argument("--disable-infobars")
 chrome_options.add_argument("--disable-popup-blocking")
 chrome_options.add_argument("--window-size=1920,1080")
 
-# Initialize WebDriver with the defined options
+
 driver = webdriver.Chrome(service=Service(chrome_driver_path), options=chrome_options)
 
 try:
