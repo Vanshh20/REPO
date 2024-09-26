@@ -1,6 +1,7 @@
 import os
 import time
 import pandas as pd
+import psycopg2
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -10,11 +11,18 @@ from selenium.webdriver.chrome.options import Options
 
 chrome_driver_path = "/usr/local/bin/chromedriver"  # Path to your ChromeDriver
 DOWNLOAD_DIR = '/Users/vanshjain/Desktop/XLSX'  # New download directory
-XML_FILE_PATH = '/Users/vanshjain/Downloads/BRSR_1241134_10092024014211_WEB.xml'
+XML_FILE_PATH = '/Users/vanshjain/Downloads/BRSR_1240511_08092024065607_WEB.xml'
 CONVERSION_URL = "http://ec2-3-221-41-38.compute-1.amazonaws.com"
-EXPECTED_DOWNLOAD_FILENAME = "brsr_1241134_10092024014211_web.xlsx"
+EXPECTED_DOWNLOAD_FILENAME = "brsr_1240511_08092024065607_web.xlsx"
 
+POSTGRESQL_CONFIG = {
+    'host': 'localhost',
+    'database': 'postgres',
+    'user': 'postgres',
+    'password': 'root'
+}
 
+# Create download directory if it doesn't exist
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 chrome_options = Options()
@@ -24,7 +32,7 @@ chrome_options.accept_insecure_certs = True
 chrome_options.add_argument("--allow-running-insecure-content")
 chrome_options.add_argument("--unsafely-treat-insecure-origin-as-secure=http://ec2-3-221-41-38.compute-1.amazonaws.com")
 
-
+# These options are to disable security warnings and allow file download without interruption
 prefs = {
     "download.default_directory": DOWNLOAD_DIR,  # Set the default download location
     "download.prompt_for_download": False,       # Disable download prompt
@@ -42,7 +50,11 @@ chrome_options.add_argument("--disable-infobars")
 chrome_options.add_argument("--disable-popup-blocking")
 chrome_options.add_argument("--window-size=1920,1080")
 
+# Set Chrome to run in headless mode
+chrome_options.add_argument("--headless")
+chrome_options.add_argument("--disable-software-rasterizer")
 
+# Initialize WebDriver with the defined options
 driver = webdriver.Chrome(service=Service(chrome_driver_path), options=chrome_options)
 
 try:
@@ -84,14 +96,59 @@ try:
     print("Preview of parsed data:")
     print(df.head())
 
-    # Extract CIN from the 'Fact Value' column
+    print("Connecting to PostgreSQL database...")
+    conn = psycopg2.connect(
+        host=POSTGRESQL_CONFIG['host'],
+        database=POSTGRESQL_CONFIG['database'],
+        user=POSTGRESQL_CONFIG['user'],
+        password=POSTGRESQL_CONFIG['password']
+    )
+    cursor = conn.cursor()
+    print("Connected to PostgreSQL successfully.")
+
+    # Extract CIN from the first row of the 'Fact Value' column
     cin = df['Fact Value'].iloc[0] if 'Fact Value' in df.columns else None
+
     if cin is None or pd.isna(cin):
         raise ValueError("CIN value is missing or not found in the first row of the 'Fact Value' column.")
+
+    insert_query = """
+        INSERT INTO excel_data (cin, sr_no, element_name, period, unit, decimals, fact_value)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+    """
+
+    for index, row in df.iterrows():
+        sr_no = row.get('Sr.No.')  
+        element_name = row.get('Element Name')
+        period = row.get('Period')
+        unit = row.get('Unit')
+        decimals = row.get('Decimals')
+        fact_value = row.get('Fact Value')
+
+        sr_no = int(sr_no) if pd.notna(sr_no) else None
+        decimals = decimals if pd.notna(decimals) else 0
+        fact_value = fact_value if pd.notna(fact_value) else ''
+
+        cursor.execute(insert_query, (
+            cin,
+            sr_no,
+            element_name,
+            period,
+            unit,
+            decimals,
+            fact_value
+        ))
+
+    conn.commit()
+    print("Data uploaded to PostgreSQL successfully.")
 
 except Exception as e:
     print(f"An error occurred: {e}")
 
 finally:
+    if 'cursor' in locals():
+        cursor.close()
+    if 'conn' in locals():
+        conn.close()
     driver.quit()
     print("WebDriver closed.")
